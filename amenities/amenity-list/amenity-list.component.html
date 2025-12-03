@@ -1,0 +1,100 @@
+<!-- Tu estructura existente - AGREGAR condiciones *ngIf -->
+
+<div class="amenity-list-container">
+  <div class="header">
+    <h2>Amenidades</h2>
+    
+    <!-- ✅ AGREGAR *ngIf: Botón crear solo para admins -->
+    <button mat-raised-button 
+            color="primary"
+            (click)="openCreateDialog()"
+            *ngIf="canCreateAmenity()">
+      <mat-icon>add</mat-icon>
+      Nueva Amenidad
+    </button>
+  </div>
+
+  <!-- Tu grid/lista de amenidades existente -->
+  <div class="amenities-grid">
+    <mat-card *ngFor="let amenity of amenities" class="amenity-card">
+      <mat-card-header>
+        <mat-card-title>{{ amenity.nombre }}</mat-card-title>
+        
+        <!-- ✅ Badge de estado -->
+        <mat-chip [class]="'status-' + getStatusSlug(amenity.estado)">
+          {{ amenity.estado }}
+        </mat-chip>
+      </mat-card-header>
+
+      <mat-card-content>
+        <p>{{ amenity.descripcion }}</p>
+        
+        <div class="amenity-details">
+          <p *ngIf="amenity.capacidad">
+            <mat-icon>people</mat-icon>
+            Capacidad: {{ amenity.capacidad }} personas
+          </p>
+          
+          <p *ngIf="amenity.horario_disponible">
+            <mat-icon>schedule</mat-icon>
+            {{ amenity.horario_disponible }}
+          </p>
+          
+          <p *ngIf="amenity.ubicacion">
+            <mat-icon>place</mat-icon>
+            {{ amenity.ubicacion }}
+          </p>
+
+          <!-- ❌ NO MOSTRAR costo_reserva -->
+          
+          <!-- ✅ Estado de disponibilidad -->
+          <div class="status-info" [ngClass]="getStatusSlug(amenity.estado)">
+            <mat-icon>{{ getStatusIcon(amenity.estado) }}</mat-icon>
+            <span>{{ getStatusMessage(amenity.estado) }}</span>
+          </div>
+        </div>
+      </mat-card-content>
+
+      <mat-card-actions>
+        <!-- Ver características - Todos pueden -->
+        <button mat-button [routerLink]="['/amenities', amenity.id]">
+          <mat-icon>visibility</mat-icon>
+          Ver Características
+        </button>
+
+        <!-- ✅ AGREGAR *ngIf: Editar solo para admins -->
+        <button mat-button 
+                color="primary"
+                (click)="editAmenity(amenity)"
+                *ngIf="canEditAmenity()">
+          <mat-icon>edit</mat-icon>
+          Editar
+        </button>
+
+        <!-- ✅ AGREGAR *ngIf: Reservar solo para admins -->
+        <button mat-button 
+                color="accent"
+                (click)="reserveAmenity(amenity)"
+                *ngIf="canReserveAmenity()"
+                [disabled]="!canReserveNow(amenity)">
+          <mat-icon>event_available</mat-icon>
+          {{ amenity.estado === 'Ocupada' ? 'Reservar en otro horario' : 'Reservar' }}
+        </button>
+      </mat-card-actions>
+    </mat-card>
+  </div>
+
+  <!-- Mensaje si no hay amenidades -->
+  <div class="empty-state" *ngIf="amenities.length === 0">
+    <mat-icon>pool</mat-icon>
+    <p>No hay amenidades registradas</p>
+  </div>
+
+  <!-- ✅ AGREGAR *ngIf: Exportar CSV solo para admins -->
+  <div class="actions" *ngIf="canEditAmenity()">
+    <button mat-button (click)="exportToCSV()">
+      <mat-icon>file_download</mat-icon>
+      Exportar CSV
+    </button>
+  </div>
+</div>

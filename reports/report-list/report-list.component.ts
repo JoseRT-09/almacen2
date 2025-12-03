@@ -1,0 +1,322 @@
+// Frontend/src/app/presentation/reports/report-list/report-list.component.ts (CORREGIDO)
+import { Component, OnInit, ViewChild, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { RouterModule } from '@angular/router';
+import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
+import { MatTableDataSource, MatTableModule } from '@angular/material/table';
+import { MatPaginator, MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatSort, MatSortModule } from '@angular/material/sort';
+import { MatCardModule } from '@angular/material/card';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatNativeDateModule } from '@angular/material/core';
+import { MatBadgeModule } from '@angular/material/badge';
+import { MatDividerModule } from '@angular/material/divider';
+import { GetAllReportsUseCase } from '../../../domain/use-cases/report/get-all-reports.usecase';
+import { DeleteReportUseCase } from '../../../domain/use-cases/report/delete-report.usecase';
+import { UpdateReportUseCase } from '../../../domain/use-cases/report/update-report.usecase';
+import { Report, ReportType, ReportStatus, ReportPriority } from '../../../domain/models/report.model';
+import { NotificationService } from '../../../core/services/notification.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { TimeAgoPipe } from '../../../shared/pipes/time-ago.pipe';
+import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import { ReportStatusEnum } from '../../../domain/models/report-constants'; // IMPORTACIÓN CORREGIDA
+
+@Component({
+  selector: 'app-report-list',
+  standalone: true,
+  imports: [
+    CommonModule,
+    RouterModule,
+    ReactiveFormsModule,
+    MatTableModule,
+    MatPaginatorModule,
+    MatSortModule,
+    MatCardModule,
+    MatButtonModule,
+    MatIconModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
+    MatChipsModule,
+    MatMenuModule,
+    MatTooltipModule,
+    MatProgressSpinnerModule,
+    MatDatepickerModule,
+    MatNativeDateModule,
+    MatBadgeModule,
+    MatDividerModule,
+    TimeAgoPipe // Pipe de tiempo (NG8004 fix)
+  ],
+  templateUrl: './report-list.component.html',
+  styleUrls: ['./report-list.component.scss']
+})
+export class ReportListComponent implements OnInit {
+  private getAllReports = inject(GetAllReportsUseCase);
+  private deleteReport = inject(DeleteReportUseCase);
+  private updateReport = inject(UpdateReportUseCase);
+  private notificationService = inject(NotificationService);
+  private authService = inject(AuthService);
+  private fb = inject(FormBuilder);
+
+  @ViewChild(MatPaginator) paginator!: MatPaginator;
+  @ViewChild(MatSort) sort!: MatSort;
+
+  displayedColumns: string[] = ['titulo', 'tipo', 'prioridad', 'residencia', 'reportado_por', 'estado', 'fecha_reporte', 'acciones'];
+  dataSource = new MatTableDataSource<Report>();
+  
+  filterForm!: FormGroup;
+  isLoading = true;
+  totalReports = 0;
+  pageSize = 10;
+  pageIndex = 0;
+
+  tipos = [
+    { value: '', label: 'Todos los tipos' },
+    { value: ReportType.INCENDIO, label: 'Incendio' },
+    { value: ReportType.ELECTRICO, label: 'Eléctrico' },
+    { value: ReportType.AGUA, label: 'Agua' },
+    { value: ReportType.ROBO, label: 'Robo' },
+    { value: ReportType.OTRO, label: 'Otro' }
+  ];
+
+  // CORRECCIÓN: Uso de ReportStatusEnum
+  estados = [
+    { value: '', label: 'Todos los estados' },
+    { value: ReportStatusEnum.ABIERTO as ReportStatus, label: 'Abierto' },
+    { value: ReportStatusEnum.EN_PROGRESO as ReportStatus, label: 'En Progreso' },
+    { value: ReportStatusEnum.RESUELTO as ReportStatus, label: 'Resuelto' },
+    { value: ReportStatusEnum.CERRADO as ReportStatus, label: 'Cerrado' }
+  ];
+
+  prioridades = [
+    { value: '', label: 'Todas las prioridades' },
+    { value: ReportPriority.BAJA, label: 'Baja' },
+    { value: ReportPriority.MEDIA, label: 'Media' },
+    { value: ReportPriority.ALTA, label: 'Alta' },
+    { value: ReportPriority.CRITICA, label: 'Crítica' }
+  ];
+
+  ngOnInit(): void {
+    this.initFilterForm();
+    this.loadReports();
+    this.setupFilterListeners();
+  }
+
+  initFilterForm(): void {
+    this.filterForm = this.fb.group({
+      search: [''],
+      tipo: [''],
+      estado: [''],
+      prioridad: [''],
+      fecha_inicio: [null],
+      fecha_fin: [null]
+    });
+  }
+
+  setupFilterListeners(): void {
+    this.filterForm.valueChanges
+      .pipe(
+        debounceTime(400),
+        distinctUntilChanged()
+      )
+      .subscribe(() => {
+        this.pageIndex = 0;
+        this.loadReports();
+      });
+  }
+
+  loadReports(): void {
+    this.isLoading = true;
+
+    const filters = this.filterForm.value;
+    const params: any = {
+      page: this.pageIndex + 1,
+      limit: this.pageSize
+    };
+
+    if (filters.tipo) params.tipo = filters.tipo;
+    if (filters.estado) params.estado = filters.estado;
+    if (filters.prioridad) params.prioridad = filters.prioridad;
+    if (filters.search) params.search = filters.search;
+    if (filters.fecha_inicio) params.fecha_inicio = filters.fecha_inicio.toISOString();
+    if (filters.fecha_fin) params.fecha_fin = filters.fecha_fin.toISOString();
+
+    this.getAllReports.execute(params).subscribe({
+      next: (response) => {
+        this.dataSource.data = response.data;
+        this.totalReports = response.total;
+        this.isLoading = false;
+      },
+      error: (error) => {
+        this.notificationService.error('Error al cargar reportes');
+        this.isLoading = false;
+      }
+    });
+  }
+
+  onPageChange(event: PageEvent): void {
+    this.pageIndex = event.pageIndex;
+    this.pageSize = event.pageSize;
+    this.loadReports();
+  }
+
+  clearFilters(): void {
+    this.filterForm.reset({
+      search: '',
+      tipo: '',
+      estado: '',
+      prioridad: '',
+      fecha_inicio: null,
+      fecha_fin: null
+    });
+  }
+
+  onDelete(report: Report): void {
+    if (confirm(`¿Estás seguro de eliminar el reporte "${report.titulo}"?`)) {
+      this.deleteReport.execute(report.id).subscribe({
+        next: () => {
+          this.notificationService.success('Reporte eliminado correctamente');
+          this.loadReports();
+        },
+        error: () => {
+          this.notificationService.error('Error al eliminar reporte');
+        }
+      });
+    }
+  }
+
+  changeStatus(report: Report, newStatus: ReportStatus): void {
+    this.updateReport.execute(report.id, { estado: newStatus }).subscribe({
+      next: () => {
+        this.notificationService.success(`Estado actualizado a: ${newStatus}`);
+        this.loadReports();
+      },
+      error: () => {
+        this.notificationService.error('Error al actualizar estado');
+      }
+    });
+  }
+
+  getTypeClass(type: ReportType): string {
+    const typeMap: Record<ReportType, string> = {
+      [ReportType.INCENDIO]: 'type-fire',
+      [ReportType.ELECTRICO]: 'type-electric',
+      [ReportType.AGUA]: 'type-water',
+      [ReportType.ROBO]: 'type-theft',
+      [ReportType.OTRO]: 'type-other'
+    };
+    return typeMap[type] || 'type-other';
+  }
+
+  getTypeIcon(type: ReportType): string {
+    const iconMap: Record<ReportType, string> = {
+      [ReportType.INCENDIO]: 'local_fire_department',
+      [ReportType.ELECTRICO]: 'flash_on',
+      [ReportType.AGUA]: 'water_drop',
+      [ReportType.ROBO]: 'security',
+      [ReportType.OTRO]: 'help_outline'
+    };
+    return iconMap[type] || 'help_outline';
+  }
+
+  // CORRECCIÓN: Uso de ReportStatusEnum
+  getStatusClass(status: ReportStatus): string {
+    const statusMap: { [key: string]: string } = {
+      [ReportStatusEnum.ABIERTO]: 'status-open',
+      [ReportStatusEnum.EN_PROGRESO]: 'status-progress',
+      [ReportStatusEnum.RESUELTO]: 'status-resolved',
+      [ReportStatusEnum.CERRADO]: 'status-closed'
+    };
+    return statusMap[status];
+  }
+
+  // CORRECCIÓN: Uso de ReportStatusEnum
+  getStatusIcon(status: ReportStatus): string {
+    const iconMap: Record<string, string> = {
+      [ReportStatusEnum.ABIERTO]: 'error_outline',
+      [ReportStatusEnum.EN_PROGRESO]: 'sync',
+      [ReportStatusEnum.RESUELTO]: 'check_circle',
+      [ReportStatusEnum.CERRADO]: 'archive'
+    };
+    return iconMap[status];
+  }
+
+  getPriorityClass(priority: ReportPriority): string {
+    const priorityMap: Record<ReportPriority, string> = {
+      [ReportPriority.BAJA]: 'priority-low',
+      [ReportPriority.MEDIA]: 'priority-medium',
+      [ReportPriority.ALTA]: 'priority-high',
+      [ReportPriority.CRITICA]: 'priority-critical'
+    };
+    return priorityMap[priority];
+  }
+
+  getPriorityIcon(priority: ReportPriority): string {
+    const iconMap: Record<ReportPriority, string> = {
+      [ReportPriority.BAJA]: 'arrow_downward',
+      [ReportPriority.MEDIA]: 'remove',
+      [ReportPriority.ALTA]: 'arrow_upward',
+      [ReportPriority.CRITICA]: 'priority_high'
+    };
+    return iconMap[priority];
+  }
+
+  getReporterName(report: Report): string {
+    if (report.reportadoPor) {
+      return `${report.reportadoPor.nombre} ${report.reportadoPor.apellido}`;
+    }
+    return 'Usuario desconocido';
+  }
+
+  canEdit(report: Report): boolean {
+    const currentUser = this.authService.getCurrentUser();
+    if (!currentUser) return false;
+    
+    // Admin puede editar todos
+    if (this.authService.isAdmin()) return true;
+    
+    // CORRECCIÓN: Uso de ReportStatusEnum
+    return report.reportado_por === currentUser.id && report.estado === ReportStatusEnum.ABIERTO;
+  }
+
+  canDelete(): boolean {
+    return this.authService.isAdmin();
+  }
+
+  exportToCSV(): void {
+    this.notificationService.info('Exportando a CSV...');
+  }
+
+  // CORRECCIÓN: Uso de ReportStatusEnum
+  getOpenCount(): number {
+    return this.dataSource.data.filter(r => r.estado === ReportStatusEnum.ABIERTO).length;
+  }
+
+  // CORRECCIÓN: Uso de ReportStatusEnum
+  getInProgressCount(): number {
+    return this.dataSource.data.filter(r => r.estado === ReportStatusEnum.EN_PROGRESO).length;
+  }
+
+  getCriticalCount(): number {
+    return this.dataSource.data.filter(r => r.prioridad === ReportPriority.CRITICA).length;
+  }
+
+  // Helper para obtener residencia
+  getResidence(report: Report) {
+    return report.Residence || report.residencia;
+  }
+
+  // Helper para obtener fecha de creación
+  getCreatedDate(report: Report): Date | string {
+    return report.created_at || new Date();
+  }
+}

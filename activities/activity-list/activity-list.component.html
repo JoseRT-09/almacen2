@@ -1,0 +1,67 @@
+<!-- Tu estructura existente - AGREGAR condiciones *ngIf -->
+
+<div class="activity-list-container">
+  <div class="header">
+    <h2>Actividades</h2>
+    
+    <!-- ✅ AGREGAR *ngIf: Botón crear solo para admins -->
+    <button mat-raised-button 
+            color="primary"
+            (click)="openCreateDialog()"
+            *ngIf="canCreateActivity()">
+      <mat-icon>add</mat-icon>
+      Nueva Actividad
+    </button>
+  </div>
+
+  <!-- Tu grid/lista de actividades existente -->
+  <div class="activities-grid">
+    <mat-card *ngFor="let activity of activities" class="activity-card">
+      <mat-card-header>
+        <!-- Tu contenido existente -->
+        <mat-card-title>{{ activity.titulo }}</mat-card-title>
+        <mat-card-subtitle>{{ activity.tipo }}</mat-card-subtitle>
+      </mat-card-header>
+
+      <mat-card-content>
+        <!-- Tu contenido existente -->
+        <p>{{ activity.descripcion }}</p>
+        <p><strong>Fecha:</strong> {{ activity.fecha_inicio | date:'short' }}</p>
+        <p *ngIf="activity.ubicacion">
+          <strong>Ubicación:</strong> {{ activity.ubicacion }}
+        </p>
+      </mat-card-content>
+
+      <mat-card-actions>
+        <!-- Ver detalles - Todos pueden -->
+        <button mat-button [routerLink]="['/activities', activity.id]">
+          Ver Detalles
+        </button>
+
+        <!-- ✅ AGREGAR *ngIf: Editar solo para admins -->
+        <button mat-button 
+                color="primary"
+                (click)="editActivity(activity)"
+                *ngIf="canEditActivity()">
+          Editar
+        </button>
+
+        <!-- ✅ AGREGAR *ngIf: Cancelar solo para admins -->
+        <button mat-button 
+                color="warn"
+                (click)="cancelActivity(activity.id)"
+                *ngIf="canEditActivity()">
+          Cancelar
+        </button>
+      </mat-card-actions>
+    </mat-card>
+  </div>
+
+  <!-- ✅ AGREGAR *ngIf: Exportar CSV solo para admins -->
+  <div class="actions" *ngIf="canEditActivity()">
+    <button mat-button (click)="exportToCSV()">
+      <mat-icon>file_download</mat-icon>
+      Exportar CSV
+    </button>
+  </div>
+</div>
